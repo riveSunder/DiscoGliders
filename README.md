@@ -29,4 +29,5 @@ Find notebooks for recreating Disco Gliders figures and introductions to each gl
 
 # Experiments
 
-Experiments can be replicated using the scripts in `scripts`
+Experiments can be replicated using the files in `scripts` for gliders in Lenia, SmoothLife, Glaberish, and Neural CA, and by running the notebooks `notebooks/u_skate_world.ipynb` and `notebooks/adam_automata.ipynb` for gliders in U-Skate World and adam automata systems. The notebook experiments rely on human assessment of glider persistence and use grid search, so coverage will be less complete compared to the scripted experiments, which use an adaptive random walk. 
+
