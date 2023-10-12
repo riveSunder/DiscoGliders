@@ -99,6 +99,9 @@ def rxn_dfn_walk(**kwargs):
     else:
         use_correlation = True
 
+    # patterns must be dynamic
+    use_change = True
+
     # how far we can step in our random walk
     max_scale_dx = max_dx * 0.25
     max_scale_dt = max_dt * 0.25
@@ -238,7 +241,7 @@ def rxn_dfn_walk(**kwargs):
             while len(pattern.shape) < 4:
                 pattern = pattern[None,...]
 
-            if system_type == "RxnDfn":
+            if system_type == "RxnDfn" and min_dx != max_dx:
                 scaled_pattern = pattern
             else:
                 scaled_pattern = skimage.transform.rescale(pattern, \
@@ -276,9 +279,10 @@ def rxn_dfn_walk(**kwargs):
             starting_correlation = starting_correlation / starting_correlation.std()
 
             starting_grid = 1.0 * grid
+            old_grid = 1.0 * grid
             starting_pattern = (1.0 * scaled_pattern).to(my_device)
 
-            if system_type == "RxnDfn":
+            if system_type == "RxnDfn" and min_dx != max_dx:
                 setup_steps = 1000
 
                 slope_dt = (ca.get_dt() - dt)  / setup_steps
@@ -298,22 +302,35 @@ def rxn_dfn_walk(**kwargs):
 
             # set temporal step size and kernel radius
             ca.set_dt(dt)
-            ca.set_dx(dx)
+            if min_dx != max_dx:
+                ca.set_dx(dx)
             ca.set_kernel_radius(kr)
 
             pattern_sum = grid.cpu().sum()
 
             t1 = time.time()
             failed = False
+            images = None
+            old_grid = 1.0 * grid
+            print(f"first kr {kr} {ca.get_kernel_radius()}")
+            
             for my_step in range(max_steps):
 
                 grid = ca(grid)
 
-                if use_correlation and (my_step % (max_steps // 32) == 0 \
+
+                if save_images and (my_step % (max_steps // 8) == 0):
+                    if images is None:
+                        images = 1. * grid
+                    else:
+                        images = torch.cat([images, 1.*grid], 0)
+
+                if use_correlation and (my_step % (max_steps // 16) == 0 \
                         or my_step == max_steps -1):
 
-                    padded_g = F.pad(grid[0:1,0:1], (grid_size,0, grid_size, 0), \
-                            mode="constant", value=starting_grid[0,0,-1,-1])
+                    padded_g = torch.cat([grid[0:1,0:1], grid[0:1, 0:1]], axis=-1)
+                    padded_g = torch.cat([padded_g, padded_g], axis=-2)
+
 
                     padded_s = 1.0 * starting_pattern[0:1,0:1] #starting_grid[0:1,0:1] 
 
@@ -321,18 +338,19 @@ def rxn_dfn_walk(**kwargs):
                     padded_s -= padded_s.mean()
 
                     correlate = F.conv2d(padded_g, padded_s[0:1,0:1], padding="same")
-                    autocorrelate = F.conv2d(padded_g, padded_g, padding="same")
+                    autocorrelate = F.conv2d(padded_s, padded_s, padding="same")
 
-                    c_max = correlate.max() / correlate.std()
+                    c_max_c_std_dev = correlate.max() / (correlate.std()+1e-6)
 
-                    corr_autocorr = correlate.max() / autocorrelate.max()
+                    corr_autocorr = correlate.max() / (autocorrelate.max()+1e-6)
 
                     print(f"step {my_step} \n"\
                             f"correlation.max / autocorrelation.max {corr_autocorr:.4f}")
 
-                    print(f" correlation max / correlation std. dev. with grid_0 {c_max.item():3f}")
+                    print(f" correlation max / correlation std. dev. with grid_0 {c_max_c_std_dev.item():3f}")
 
-                    if corr_autocorr < min_correlation:
+                    if (corr_autocorr < min_correlation or corr_autocorr > max_correlation)\
+                            or c_max_c_std_dev.item() < 10.0:
                         print("failed correlation test")
                         failed = True
 
@@ -340,13 +358,23 @@ def rxn_dfn_walk(**kwargs):
                     pass
                 else:
                     corr_autocorr = "na"
-                    c_max = "na"
+                    c_max_c_std_dev = "na"
+
+            
+                if use_change:
+                    # pattern must be active
+
+                    if (old_grid - grid).abs().max() <= 0.0:
+                        print("failed activity test (no change in pattern)")
+                        failed = True
+                    old_grid = 1.0 * grid
 
                 if use_gain:
                     current_grid_sum = grid.sum()
                     gain = current_grid_sum.cpu() / pattern_sum
 
                     if (np.abs(1. - gain) > max_gain):
+                        print(f"failed gain test with gain {gain:.3f}")
                         failed = True
                 else:
                     gain = "na"
@@ -362,6 +390,8 @@ def rxn_dfn_walk(**kwargs):
                     print("failed finite test")
                     failed = True
                 if failed:
+                    if save_images:
+                        images = torch.cat([images, 1.*grid], 0)
                     break
                     
 
@@ -369,13 +399,13 @@ def rxn_dfn_walk(**kwargs):
             kr_string = f"{kr}"
             dt_string = f"{dt:.6f}".replace(".","_")
 
-            if system_type == "RxnDfn":
+            if system_type == "RxnDfn" and min_dx != max_dx:
                 dx_str = f"{dx:.6f}".replace(".","_")
             else:
                 dx_str = "na"
 
             if use_correlation:
-                corr_str = f"{c_max:.3f}".replace(".","_")
+                corr_str = f"{c_max_c_std_dev:.3f}".replace(".","_")
                 autocorr_str = f"{corr_autocorr:.3f}".replace(".","_")
             else:
                 corr_str = "na" 
@@ -407,20 +437,40 @@ def rxn_dfn_walk(**kwargs):
 
             if save_images:
 
+                image_every = max_steps // 8
                 image_fn = f"final_grid_{pattern_name}_step{my_step}_"\
                         f"kr{kr_string}_dt{dt_string}_fp{fp_string}_dx{dx_str}_"\
+                        f"image_every{image_every}"\
                         f"autocorr{autocorr_str}_corr{corr_str}_gain{gain_str}.png"
 
                 save_image_path = os.path.join(images_folder, image_fn)
-                dgrid = starting_grid - grid
+
+                dgrid = starting_grid[0][0] - images[0][0]
                 dgrid = dgrid - dgrid.min()
                 dgrid = (dgrid / dgrid.max())#.cpu()
 
-                image_grid = torch.cat([starting_grid, grid, dgrid], -1)
+                image_grid = torch.cat([starting_grid[0][0], \
+                        images[0][0], dgrid], -1)
+                my_old_image = 1.0 * images[0][0]
+
+                for my_image in images[1:]:
+
+                    dgrid = my_old_image - my_image[0]
+                    dgrid = dgrid - dgrid.min()
+                    dgrid = (dgrid / dgrid.max())#.cpu()
+
+                    row_image_grid = torch.cat(\
+                            [my_old_image, my_image[0], dgrid], -1)
+                    image_grid = torch.cat([image_grid, row_image_grid], -2)
+
+                    my_old_image = 1.0 * my_image[0]
+
                 print(starting_grid[0,0].mean(), grid[0,0].mean())
-                image_to_save = np.array(255*image_grid[0,0].squeeze().cpu().numpy(), dtype=np.uint8)
+                image_to_save = np.array(255*image_grid.cpu().numpy(), dtype=np.uint8)
                 print(f"kr: {kr}, grid size = {grid.shape}")
                 sio.imsave(save_image_path, image_to_save)
+                tensor_fn = os.path.splitext(save_image_path)[0] + ".pt"
+                torch.save(images, tensor_fn)
             else:
                 save_image_path = "no_image"
 
@@ -469,7 +519,7 @@ def rxn_dfn_walk(**kwargs):
             elif np.isclose(dt, min_dt, rtol=0.001) and np.sign(dt_shift) < 0:
                 dt_shift *= -1.
 
-            if system_type == "RxnDfn":
+            if system_type == "RxnDfn" and min_dx != max_dx:
                 if np.isclose(dx, max_dx, rtol=0.001) and np.sign(dx_shift) > 0:
                     dx_shift *= -1.
                 elif np.isclose(dx, min_dx, rtol=0.001) and np.sign(dx_shift) < 0:
@@ -483,7 +533,7 @@ def rxn_dfn_walk(**kwargs):
             dt = dt + dt_shift
             dt = min([max([dt, min_dt]), max_dt])
 
-            if system_type == "RxnDfn":
+            if system_type == "RxnDfn" and min_dx != max_dx:
                 dx = dx + dx_shift
                 dx = min([max([dx, min_dx]), max_dx])
 
