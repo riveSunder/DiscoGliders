@@ -14,7 +14,7 @@ save_images = "0"
 # patterns from NCA
 log_filepath_nca = os.path.join(log_directory, "nca_exp.txt")
 glider_patterns = " smoothlife_single_glider000 "
-system_type = "NCA"
+system_type = "CCA"
 max_steps = "1024"
 device = "cuda"
 kernel_radius_bounds = "1 101"

@@ -1,7 +1,7 @@
 import os
 
 script_path = os.path.split(os.path.split(os.path.abspath(__file__))[0])[0]
-log_directory = os.path.join(script_path, "..", "logs", "uskate_exp")
+log_directory = os.path.join(script_path, "logs", "glaberish_exp")
 log_filepath = os.path.join(log_directory, "log_exp_glaberish.txt")
 
 if os.path.exists(log_directory):

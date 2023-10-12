@@ -21,7 +21,7 @@ gain_limits = "0.30"
 dx_bounds = "0.01"
 time_limit = 14400 # 4 hour experiment
 
-my_cmd_nca = f"python -m disco.walk -l {time_limit} -c {system_type} "\
+my_cmd = f"python -m disco.walk -l {time_limit} -c {system_type} "\
         f"-g {glider_patterns}"\
         f"-s {save_images} -m {max_steps} -d {device}  -x {dx_bounds} "\
         f"-y 53809de1ced462f4b6bc517e388f5ec116c43901 "\

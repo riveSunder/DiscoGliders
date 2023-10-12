@@ -14,7 +14,7 @@ save_images = "0"
 # patterns from Lenia
 log_filepath_lenia = os.path.join(log_directory, "exp_0x0r06_lenia.txt")
 glider_patterns = f" orbium_orbium000 geminium_hydrogeminium_natans000 geminium2_wobble_glider000 "\
-	"scutium_gravidus_single000 triscutium_solidus_triscutium000 "\
+	"scutium_gravidus_single000 triscutium_solidus_triscutium000 "
 system_type = "CCA"
 max_steps = "1024"
 device = "cuda"
