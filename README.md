@@ -1,3 +1,5 @@
+![Summary of discretization-dependent self-organization](assets/summary_figure.png)
+
 # Self-organization experiments in discrete approximations of complex continuous systems
 
 This work examines the relationship between discretization and self-organizing, persistent mobile patterns in complex systems. Discretization has been described as a "necessary evil" for simulating continuous cellular automata (see [Rucker 1999](https://www.rudyrucker.com/pdf/rucker_continuous_CAs_in_2D.pdf). However, discretization and the systematic error that accompanies is apparently necessary for gliders to persist in multiple pattern-rule pairs across a wide variety of complex simulation systems that support them: several variants of continuous cellular automata, neural cellular automata, a reaction diffusion system, and a continuos cellular automata based on adam, adaptive moment estimation, an update method populer for training deep neural networks. 
